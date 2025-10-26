@@ -1,0 +1,34 @@
+{
+  "name": "ChatBackEnd",
+  "version": "1.0.0",
+  "description": "Backend for web chat with Socket.IO, Prisma, Docker, and PostgreSQL",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:push": "prisma db push"
+  },
+  "keywords": ["chat", "websocket", "socket.io", "prisma", "postgresql"],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.19.0",
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "@types/cors": "^2.8.17",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
