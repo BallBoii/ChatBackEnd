@@ -2,6 +2,9 @@ import { Server, Socket } from 'socket.io';
 import prisma from '../config/database';
 import { JoinRoomData, SendMessageData, CreateRoomData, UserData } from '../types';
 
+// Constants
+const MAX_MESSAGES_ON_JOIN = 50;
+
 export const setupSocketHandlers = (io: Server) => {
   io.on('connection', (socket: Socket) => {
     console.log(`User connected: ${socket.id}`);
@@ -99,7 +102,7 @@ export const setupSocketHandlers = (io: Server) => {
               orderBy: {
                 createdAt: 'asc',
               },
-              take: 50,
+              take: MAX_MESSAGES_ON_JOIN,
             },
             users: {
               include: {

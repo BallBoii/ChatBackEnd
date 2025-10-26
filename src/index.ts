@@ -9,6 +9,9 @@ import { setupSocketHandlers } from './handlers/socketHandlers';
 // Load environment variables
 dotenv.config();
 
+// Constants
+const MAX_MESSAGES_PER_REQUEST = 100;
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -73,7 +76,7 @@ app.get('/api/rooms/:roomId', async (req, res) => {
           orderBy: {
             createdAt: 'asc',
           },
-          take: 100,
+          take: MAX_MESSAGES_PER_REQUEST,
         },
         users: {
           include: {
