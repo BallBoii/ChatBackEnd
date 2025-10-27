@@ -1,5 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma schema for session-only chat
+// No user accounts - anonymous sessions only
+// Supports text, stickers, images, and file messages
 
 generator client {
   provider = "prisma-client-js"
@@ -10,46 +11,77 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String    @id @default(uuid())
-  username  String    @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  messages  Message[]
-  rooms     RoomUser[]
-}
-
+// Chat rooms with token-based access and expiration
 model Room {
-  id        String     @id @default(uuid())
-  name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  messages  Message[]
-  users     RoomUser[]
+  id          String    @id @default(cuid())
+  token       String    @unique // Token for joining the room
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime  // Room expiration time
+  isActive    Boolean   @default(true)
+  
+  sessions    Session[]
+  messages    Message[]
+  
+  @@index([token])
+  @@index([expiresAt])
 }
 
+// Anonymous user sessions (no accounts)
+model Session {
+  id          String    @id @default(cuid())
+  roomId      String
+  nickname    String    // Display name for the session
+  sessionToken String   @unique // Unique session identifier
+  createdAt   DateTime  @default(now())
+  lastActiveAt DateTime @default(now())
+  
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  
+  @@index([sessionToken])
+  @@index([roomId])
+}
+
+// Messages supporting different types
 model Message {
-  id        String   @id @default(uuid())
-  content   String
-  userId    String
-  roomId    String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-
+  id          String      @id @default(cuid())
+  roomId      String
+  sessionId   String?     // Optional - can be null if session is deleted
+  nickname    String      @default("Ghost") // Store nickname with message (denormalized for persistence)
+  type        MessageType @default(TEXT)
+  content     String?     // Text content or sticker code
+  createdAt   DateTime    @default(now())
+  editedAt    DateTime?
+  isDeleted   Boolean     @default(false)
+  
+  room        Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  session     Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+  
   @@index([roomId])
-  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
 }
 
-model RoomUser {
-  id        String   @id @default(uuid())
-  userId    String
-  roomId    String
-  joinedAt  DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+// Message types enum
+enum MessageType {
+  TEXT
+  STICKER
+  IMAGE
+  FILE
+}
 
-  @@unique([userId, roomId])
-  @@index([roomId])
-  @@index([userId])
+// Attachments for images and files
+model Attachment {
+  id          String    @id @default(cuid())
+  messageId   String
+  fileName    String
+  fileSize    Int       // Size in bytes
+  mimeType    String    // e.g., image/png, application/pdf
+  url         String    // Storage URL or path
+  createdAt   DateTime  @default(now())
+  
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  @@index([messageId])
 }

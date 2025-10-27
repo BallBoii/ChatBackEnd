@@ -1,199 +1,245 @@
 import { Server, Socket } from 'socket.io';
-import prisma from '../config/database';
-import { JoinRoomData, SendMessageData, CreateRoomData, UserData } from '../types';
+import roomService from '@/services/RoomService';
+import sessionService from '@/services/SessionService';
+import messageService from '@/services/MessageService';
+import { 
+  ServerToClientEvents, 
+  ClientToServerEvents, 
+  InterServerEvents, 
+  SocketData 
+} from '@/types/socket.types';
+import { MessageType } from '@/types/message.types';
 
-// Constants
-const MAX_MESSAGES_ON_JOIN = 50;
+type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
+type TypedServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
-export const setupSocketHandlers = (io: Server) => {
-  io.on('connection', (socket: Socket) => {
-    console.log(`User connected: ${socket.id}`);
+export const setupSocketHandlers = (io: TypedServer) => {
+  io.on('connection', (socket: TypedSocket) => {
+    console.log(`[WebSocket] Client connected: ${socket.id}`);
 
-    // Handle user registration
-    socket.on('register', async (data: UserData) => {
+    /**
+     * Join a room
+     */
+    socket.on('join_room', async ({ roomToken, sessionToken }) => {
       try {
-        const { userId, username } = data;
 
-        // Create or update user
-        const user = await prisma.user.upsert({
-          where: { id: userId },
-          update: { username },
-          create: { id: userId, username },
-        });
+        if (socket.data.roomId && socket.data.roomToken == roomToken) {
+          return; // Already in the room
+        }
 
-        socket.data.userId = userId;
-        socket.data.username = username;
+        // Validate session
+        const { sessionId, roomId, nickname } = await sessionService.validateSession(sessionToken);
 
-        socket.emit('registered', { success: true, user });
-        console.log(`User registered: ${username} (${userId})`);
-      } catch (error) {
-        console.error('Error registering user:', error);
-        socket.emit('error', { message: 'Failed to register user' });
-      }
-    });
+        // Store session data in socket
+        socket.data.sessionToken = sessionToken;
+        socket.data.nickname = nickname;
+        socket.data.roomId = roomId;
+        socket.data.roomToken = roomToken;
+        socket.data.messageCount = 0;
+        socket.data.lastMessageTime = 0;
 
-    // Handle creating a room
-    socket.on('createRoom', async (data: CreateRoomData) => {
-      try {
-        const { name, userId } = data;
-
-        const room = await prisma.room.create({
-          data: {
-            name,
-            users: {
-              create: {
-                userId,
-              },
-            },
-          },
-          include: {
-            users: {
-              include: {
-                user: true,
-              },
-            },
-          },
-        });
-
-        socket.join(room.id);
-        socket.emit('roomCreated', { success: true, room });
-        console.log(`Room created: ${name} (${room.id})`);
-      } catch (error) {
-        console.error('Error creating room:', error);
-        socket.emit('error', { message: 'Failed to create room' });
-      }
-    });
-
-    // Handle joining a room
-    socket.on('joinRoom', async (data: JoinRoomData) => {
-      try {
-        const { roomId, userId, username } = data;
-
-        // Check if user exists, create if not
-        await prisma.user.upsert({
-          where: { id: userId },
-          update: {},
-          create: { id: userId, username },
-        });
-
-        // Add user to room
-        await prisma.roomUser.upsert({
-          where: {
-            userId_roomId: {
-              userId,
-              roomId,
-            },
-          },
-          update: {},
-          create: {
-            userId,
-            roomId,
-          },
-        });
-
-        // Get room with messages and users
-        const room = await prisma.room.findUnique({
-          where: { id: roomId },
-          include: {
-            messages: {
-              include: {
-                user: true,
-              },
-              orderBy: {
-                createdAt: 'asc',
-              },
-              take: MAX_MESSAGES_ON_JOIN,
-            },
-            users: {
-              include: {
-                user: true,
-              },
-            },
-          },
-        });
-
+        // Join the room
         socket.join(roomId);
-        socket.emit('joinedRoom', { success: true, room });
-        socket.to(roomId).emit('userJoined', { userId, username });
-        console.log(`User ${username} joined room ${roomId}`);
-      } catch (error) {
-        console.error('Error joining room:', error);
-        socket.emit('error', { message: 'Failed to join room' });
-      }
-    });
 
-    // Handle sending a message
-    socket.on('sendMessage', async (data: SendMessageData) => {
-      try {
-        const { roomId, userId, content } = data;
+        // Get participant count
+        const participantCount = (await io.in(roomId).fetchSockets()).length;
 
-        const message = await prisma.message.create({
-          data: {
-            content,
-            userId,
-            roomId,
-          },
-          include: {
-            user: true,
-          },
+        // Load and send message history to the joining user
+        const messageHistory = await messageService.getRoomMessages(roomId);
+        
+        // Notify the user with room info and message history
+        socket.emit('room_joined', { 
+          roomToken, 
+          participantCount,
+          messages: messageHistory // Send message history
         });
 
-        io.to(roomId).emit('newMessage', message);
-        console.log(`Message sent in room ${roomId} by ${userId}`);
-      } catch (error) {
-        console.error('Error sending message:', error);
-        socket.emit('error', { message: 'Failed to send message' });
+        // Notify ONLY others in the room (not the joining user to avoid duplicate)
+        socket.to(roomId).emit('user_joined', { nickname, participantCount });
+
+        console.log(`[WebSocket] ${nickname} joined room ${roomToken} (loaded ${messageHistory.length} messages)`);
+
+        // Check room TTL and send warning if needed
+        const ttlInfo = await roomService.checkRoomTTL(roomId);
+        if (ttlInfo.shouldWarn) {
+          socket.emit('room_ttl_warning', { expiresIn: ttlInfo.expiresIn });
+        }
+      } catch (error: any) {
+        console.error('[WebSocket] Join room error:', error);
+        socket.emit('error', { 
+          message: error.message || 'Failed to join room',
+          code: error.code 
+        });
       }
     });
 
-    // Handle leaving a room
-    socket.on('leaveRoom', async (roomId: string) => {
+    /**
+     * Send a message
+     */
+    socket.on('send_message', async (data) => {
       try {
-        socket.leave(roomId);
-        const userId = socket.data.userId;
-        const username = socket.data.username;
+        const { sessionToken, roomId, nickname } = socket.data;
 
-        if (userId) {
-          socket.to(roomId).emit('userLeft', { userId, username });
-          console.log(`User ${username} left room ${roomId}`);
+        if (!sessionToken || !roomId || !nickname) {
+          socket.emit('error', { message: 'Not connected to a room', code: 'NOT_IN_ROOM' });
+          return;
+        }
+
+        // Validate session
+        const session = await sessionService.validateSession(sessionToken);
+
+        // Send the message with nickname
+        const message = await messageService.sendMessage(
+          session.sessionId,
+          nickname,
+          roomId,
+          data.type as MessageType,
+          data.content || null,
+          data.attachments
+        );
+
+        // Broadcast to all in the room (including sender)
+        io.to(roomId).emit('new_message', {
+          id: message.id,
+          type: message.type,
+          content: message.content,
+          nickname: nickname || message.nickname,
+          createdAt: message.createdAt,
+          attachments: message.attachments,
+        });
+
+        console.log(`[WebSocket] Message sent in room by ${nickname}`);
+      } catch (error: any) {
+        console.error('[WebSocket] Send message error:', error);
+        socket.emit('error', { 
+          message: error.message || 'Failed to send message',
+          code: error.code 
+        });
+      }
+    });
+
+    /**
+     * Delete a message
+     */
+    socket.on('delete_message', async ({ messageId }) => {
+      try {
+        const { sessionToken, roomId } = socket.data;
+
+        if (!sessionToken || !roomId) {
+          socket.emit('error', { message: 'Not connected to a room', code: 'NOT_IN_ROOM' });
+          return;
+        }
+
+        const session = await sessionService.validateSession(sessionToken);
+        await messageService.deleteMessage(messageId, session.sessionId);
+
+        // Notify all in the room
+        io.to(roomId).emit('message_deleted', { messageId });
+
+        console.log(`[WebSocket] Message ${messageId} deleted`);
+      } catch (error: any) {
+        console.error('[WebSocket] Delete message error:', error);
+        socket.emit('error', { 
+          message: error.message || 'Failed to delete message',
+          code: error.code 
+        });
+      }
+    });
+
+    /**
+     * Leave a room
+     */
+    socket.on('leave_room', async () => {
+      try {
+        const { sessionToken, roomId, nickname, roomToken } = socket.data;
+
+        if (!sessionToken || !roomId) {
+          return;
+        }
+
+        // Leave the socket room
+        socket.leave(roomId);
+
+        // Get updated participant count
+        const participantCount = (await io.in(roomId).fetchSockets()).length;
+
+        // Notify others
+        socket.to(roomId).emit('user_left', { nickname: nickname || 'Unknown', participantCount });
+
+        // Delete session
+        await sessionService.removeSession(sessionToken);
+
+        console.log(`[WebSocket] ${nickname} left room ${roomToken}`);
+
+        // Clear socket data
+        socket.data = {};
+      } catch (error: any) {
+        console.error('[WebSocket] Leave room error:', error);
+      }
+    });
+
+    /**
+     * Heartbeat to keep session alive
+     */
+    socket.on('heartbeat', async () => {
+      try {
+        const { sessionToken } = socket.data;
+        if (sessionToken) {
+          await sessionService.validateSession(sessionToken);
         }
       } catch (error) {
-        console.error('Error leaving room:', error);
+        socket.emit('error', { message: 'Session expired', code: 'SESSION_EXPIRED' });
       }
     });
 
-    // Handle getting room list
-    socket.on('getRooms', async () => {
+    /**
+     * Handle disconnection
+     */
+    socket.on('disconnect', async () => {
       try {
-        const rooms = await prisma.room.findMany({
-          include: {
-            users: {
-              include: {
-                user: true,
-              },
-            },
-            _count: {
-              select: {
-                messages: true,
-                users: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
+        const { sessionToken, roomId, nickname, roomToken } = socket.data;
 
-        socket.emit('roomsList', { success: true, rooms });
+        console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+
+        if (sessionToken && roomId) {
+          // Get participant count before removing
+          const participantCount = (await io.in(roomId).fetchSockets()).length - 1;
+
+          // Notify others
+          io.to(roomId).emit('user_left', { 
+            nickname: nickname || 'Unknown', 
+            participantCount: Math.max(0, participantCount)
+          });
+
+          // Delete session
+          await sessionService.removeSession(sessionToken);
+
+          console.log(`[WebSocket] ${nickname} disconnected from room ${roomToken}`);
+        }
       } catch (error) {
-        console.error('Error getting rooms:', error);
-        socket.emit('error', { message: 'Failed to get rooms' });
+        console.error('[WebSocket] Disconnect cleanup error:', error);
       }
-    });
-
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log(`User disconnected: ${socket.id}`);
     });
   });
+
+  // Periodic room TTL warnings
+  setInterval(async () => {
+    try {
+      const expiringRooms = await roomService.getExpiringRooms(5); // 5 minutes warning
+
+      for (const room of expiringRooms) {
+        const now = new Date();
+        const expiresIn = Math.floor((room.expiresAt.getTime() - now.getTime()) / 1000);
+        
+        if (expiresIn > 0) {
+          io.to(room.id).emit('room_ttl_warning', { expiresIn });
+        }
+      }
+    } catch (error) {
+      console.error('[WebSocket] TTL warning error:', error);
+    }
+  }, 60000); // Check every minute
+
+  console.log('[WebSocket] Socket handlers initialized');
 };
+

@@ -1,4 +1,4 @@
-version: '3.8'
+name: ghostchatDb
 
 services:
   postgres:
@@ -6,36 +6,46 @@ services:
     container_name: chat-postgres
     restart: always
     environment:
-      POSTGRES_USER: chatuser
-      POSTGRES_PASSWORD: chatpassword
-      POSTGRES_DB: chatdb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_DB: adminDB
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatuser -d chatdb"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d adminDB"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chat-backend
+      
+  dufs:
+    image: sigoden/dufs
     restart: always
     ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: postgresql://chatuser:chatpassword@postgres:5432/chatdb?schema=public
-      PORT: 3000
-      NODE_ENV: production
-      CORS_ORIGIN: http://localhost:3001
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: sh -c "pnpm prisma:migrate && pnpm start"
+        - 6969:5000
+    volumes:
+        - dufsdata:/data
+    command: /data -A
+
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: chat-backend
+  #   restart: always
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgresql://admin:strongpassword@postgres:5432/adminDB?schema=public
+  #     PORT: 3000
+  #     NODE_ENV: production
+  #     CORS_ORIGIN: http://localhost:3001
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   command: sh -c "pnpm prisma:migrate && pnpm start"
 
 volumes:
   postgres_data:
+  dufsdata:
