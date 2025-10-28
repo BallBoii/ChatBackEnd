@@ -71,13 +71,13 @@ async function startServer() {
   try {
     const PORT = config.PORT;
     
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log('👻 ======================================');
       console.log(`   GhostRooms Server Started`);
       console.log('   ======================================');
-      console.log(`   🚀 Server:      http://localhost:${PORT}`);
-      console.log(`   ❤️  Health:      http://localhost:${PORT}/health`);
-      console.log(`   🔌 WebSocket:   ws://localhost:${PORT}`);
+      console.log(`   🚀 Server:      http://0.0.0.0:${PORT}`);
+      console.log(`   ❤️  Health:      http://0.0.0.0:${PORT}/health`);
+      console.log(`   🔌 WebSocket:   ws://0.0.0.0:${PORT}`);
       console.log(`   🌐 CORS Origin: ${config.CORS_ORIGIN}`);
       console.log(`   📦 Environment: ${config.NODE_ENV}`);
       console.log(`   ⏰ Room TTL:    ${config.ROOM_TTL_HOURS} hours`);
