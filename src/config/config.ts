@@ -23,7 +23,7 @@ interface EnvConfig {
 }
 
 export const config: EnvConfig = {
-  PORT: Number(process.env.PORT) || 3001,
+  PORT: Number(process.env.PORT) || 8080, // Cloud Run default
   DB_URL: process.env.DATABASE_URL as string,
   NODE_ENV: process.env.NODE_ENV || 'development',
   FILE_SERVER_URL: process.env.FILE_SERVER_URL || 'http://localhost:6969',

@@ -1,64 +1,55 @@
 FROM node:20-alpine AS builder
 
-# Install pnpm
-RUN npm install -g pnpm
+# Use pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
+# Copy lockfile first for better layer cache
+COPY pnpm-lock.yaml package.json ./
 
-# Install dependencies
+# Install all deps (รวม dev deps เพื่อ build Prisma Client/TS)
 RUN pnpm install --frozen-lockfile
 
-# Copy prisma schema first
+# Prisma schema first for better cache
 COPY prisma ./prisma/
-
-# Generate Prisma Client
 RUN pnpm prisma:generate
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Build TypeScript
+# Build TS
 RUN pnpm build
 
-# Production stage
+
+# -------- Production stage --------
 FROM node:20-alpine AS production
 
-# Install pnpm
-RUN npm install -g pnpm
+# Prisma on Alpine ต้องการ openssl และ (มัก) libc6-compat
+RUN apk add --no-cache openssl libc6-compat
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml* ./
+ENV NODE_ENV=production
 
-# Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile
-
-# Copy prisma schema and generated client
+# Copy only needed files
+COPY package.json pnpm-lock.yaml ./
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
-
+# ตัด dev deps ออกให้เล็กลง
+COPY --from=builder /app/node_modules ./node_modules
+# ถ้าอยากเล็กสุด ให้ใช้:
+# RUN corepack enable && corepack prepare pnpm@latest --activate \
+#  && pnpm install --prod --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+# Security: non-root
+RUN addgroup -g 1001 -S nodejs \
+  && adduser -S nodejs -u 1001 \
+  && chown -R nodejs:nodejs /app
 USER nodejs
 
-# Expose port
-EXPOSE 3000
+EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
-
-# Start the application
-CMD ["pnpm", "dev"]
+# รันผ่าน Node (มี dist แล้ว)
+CMD ["node", "dist/server.js"]
