@@ -73,7 +73,7 @@ async function startServer() {
     
     httpServer.listen(PORT, '0.0.0.0', () => {
       console.log('👻 ======================================');
-      console.log(`   GhostRooms Server Started!`);
+      console.log(`   GhostRooms Server Started!!`);
       console.log('   ======================================');
       console.log(`   🚀 Server:      http://0.0.0.0:${PORT}`);
       console.log(`   ❤️  Health:      http://0.0.0.0:${PORT}/health`);
