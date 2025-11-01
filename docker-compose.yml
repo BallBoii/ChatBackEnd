@@ -6,55 +6,38 @@ services:
     container_name: chat-postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
+      POSTGRES_USER: admin
       POSTGRES_PASSWORD: strongpassword
       POSTGRES_DB: adminDB
     ports:
-      - "5432:5432"
+      # Bind only to localhost for security
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d adminDB -h localhost"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      test: ["CMD-SHELL", "pg_isready -U admin -d adminDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chat-network
 
   dufs:
     image: sigoden/dufs
+    container_name: chat-dufs
     restart: always
     ports:
-      - "6969:5000"
+      - "127.0.0.1:6969:5000"
     volumes:
-      - dufsdata:/data
-    # entrypoint ของ image คือ `dufs` อยู่แล้ว
-    # command ควรใส่ args ไม่ใช่ path อย่างเดียว
+      - dufs_data:/data
     command: ["-A", "/data"]
+    networks:
+      - chat-network
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-    container_name: chat-backend
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      # ชี้ service name "postgres" แทน host.docker.internal
-      DATABASE_URL: postgresql://admin:strongpassword@postgres:5432/adminDB?schema=public
-      PORT: 8080
-      NODE_ENV: production
-      # ปรับตาม frontend จริง
-      CORS_ORIGIN: http://localhost:3000
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # รัน migrate ก่อน start (ถ้ามีสคริปต์ใน package.json)
-    # ตัวอย่าง script:
-    # "prisma:migrate": "prisma migrate deploy",
-    # "start": "node dist/server.js"
-    command: sh -c "pnpm prisma:migrate && pnpm start"
+networks:
+  chat-network:
+    driver: bridge
 
 volumes:
   postgres_data:
-  dufsdata:
+  dufs_data:

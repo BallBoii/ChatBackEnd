@@ -23,7 +23,7 @@ interface EnvConfig {
 }
 
 export const config: EnvConfig = {
-  PORT: Number(process.env.PORT) || 8080, // Cloud Run default
+  PORT: Number(process.env.PORT) || 8080,
   DB_URL: process.env.DATABASE_URL as string,
   NODE_ENV: process.env.NODE_ENV || 'development',
   FILE_SERVER_URL: process.env.FILE_SERVER_URL || 'http://localhost:6969',
@@ -33,7 +33,7 @@ export const config: EnvConfig = {
   ROOM_MAX_CAPACITY: Number(process.env.ROOM_MAX_CAPACITY) || 50,
   
   RATE_LIMIT_MESSAGES_PER_MINUTE: Number(process.env.RATE_LIMIT_MESSAGES_PER_MINUTE) || 10,
-  RATE_LIMIT_ROOM_CREATE_PER_HOUR: Number(process.env.RATE_LIMIT_ROOM_CREATE_PER_HOUR) || 5,
+  RATE_LIMIT_ROOM_CREATE_PER_HOUR: Number(process.env.RATE_LIMIT_ROOM_CREATE_PER_HOUR) || 20,
   
   MAX_MESSAGE_LENGTH: Number(process.env.MAX_MESSAGE_LENGTH) || 2000,
   MAX_FILE_SIZE_MB: Number(process.env.MAX_FILE_SIZE_MB) || 10,

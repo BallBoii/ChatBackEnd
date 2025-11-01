@@ -75,9 +75,9 @@ async function startServer() {
       console.log('👻 ======================================');
       console.log(`   GhostRooms Server Started!!`);
       console.log('   ======================================');
-      console.log(`   🚀 Server:      http://0.0.0.0:${PORT}`);
-      console.log(`   ❤️  Health:      http://0.0.0.0:${PORT}/health`);
-      console.log(`   🔌 WebSocket:   ws://0.0.0.0:${PORT}`);
+      console.log(`   🚀 Server:      ${PORT}`);
+      console.log(`   ❤️  Health:     ${PORT}/health`);
+      console.log(`   🔌 WebSocket:   ${PORT}`);
       console.log(`   🌐 CORS Origin: ${config.CORS_ORIGIN}`);
       console.log(`   📦 Environment: ${config.NODE_ENV}`);
       console.log(`   ⏰ Room TTL:    ${config.ROOM_TTL_HOURS} hours`);

@@ -1,55 +1,69 @@
+# ====================================
+# Builder Stage
+# ====================================
 FROM node:20-alpine AS builder
 
-# Use pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Enable pnpm
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
 
 WORKDIR /app
 
-# Copy lockfile first for better layer cache
+# Copy package files for dependency installation
 COPY pnpm-lock.yaml package.json ./
 
-# Install all deps (รวม dev deps เพื่อ build Prisma Client/TS)
+# Install all dependencies (including dev deps for building)
 RUN pnpm install --frozen-lockfile
 
-# Prisma schema first for better cache
+# Copy Prisma schema and generate client
 COPY prisma ./prisma/
 RUN pnpm prisma:generate
 
-# Copy source
+# Copy source code
 COPY . .
 
-# Build TS
+# Build TypeScript
 RUN pnpm build
 
-
-# -------- Production stage --------
+# ====================================
+# Production Stage
+# ====================================
 FROM node:20-alpine AS production
 
-# Prisma on Alpine ต้องการ openssl และ (มัก) libc6-compat
+# Install required system dependencies for Prisma
 RUN apk add --no-cache openssl libc6-compat
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy only needed files
+# Enable pnpm
+RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+
+# Copy package files
 COPY package.json pnpm-lock.yaml ./
+
+# Install production dependencies only
+RUN pnpm install --prod --frozen-lockfile
+
+# Copy Prisma schema and generated client from builder
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy built application
 COPY --from=builder /app/dist ./dist
 
-# ตัด dev deps ออกให้เล็กลง
-COPY --from=builder /app/node_modules ./node_modules
-# ถ้าอยากเล็กสุด ให้ใช้:
-# RUN corepack enable && corepack prepare pnpm@latest --activate \
-#  && pnpm install --prod --frozen-lockfile
-RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
-# Security: non-root
+# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nodejs -u 1001 \
   && chown -R nodejs:nodejs /app
+
 USER nodejs
 
 EXPOSE 8080
 
-# รันผ่าน Node (มี dist แล้ว)
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Start application
 CMD ["node", "dist/server.js"]
