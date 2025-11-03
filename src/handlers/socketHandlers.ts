@@ -2,6 +2,7 @@ import { Server, Socket } from 'socket.io';
 import roomService from '@/services/RoomService';
 import sessionService from '@/services/SessionService';
 import messageService from '@/services/MessageService';
+import fileService from '@/services/FileService';
 import { 
   ServerToClientEvents, 
   ClientToServerEvents, 
@@ -81,7 +82,10 @@ export const setupSocketHandlers = (io: TypedServer) => {
         const { sessionToken, roomId, nickname } = socket.data;
 
         if (!sessionToken || !roomId || !nickname) {
-          socket.emit('error', { message: 'Not connected to a room', code: 'NOT_IN_ROOM' });
+          socket.emit("error", {
+            message: "Not connected to a room",
+            code: "NOT_IN_ROOM",
+          });
           return;
         }
 
@@ -98,8 +102,25 @@ export const setupSocketHandlers = (io: TypedServer) => {
           data.attachments
         );
 
+        // If there are attachments, create the attachment records in the database
+        let attachments = [];
+        if (data.attachments && data.attachments.length > 0) {
+          for (const attachmentData of data.attachments) {
+            try {
+              const dbAttachment = await fileService.createAttachmentFromData(
+                message.id,
+                attachmentData
+              );
+              attachments.push(dbAttachment);
+            } catch (error) {
+              console.error("Failed to create attachment record:", error);
+              // Continue with other attachments
+            }
+          }
+        }
+
         // Broadcast to all in the room (including sender)
-        io.to(roomId).emit('new_message', {
+        io.to(roomId).emit("new_message", {
           id: message.id,
           type: message.type,
           content: message.content,

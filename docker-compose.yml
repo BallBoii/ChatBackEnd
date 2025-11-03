@@ -34,6 +34,23 @@ services:
     networks:
       - chat-network
 
+  app:
+    build: .
+    container_name: chat-app
+    restart: always
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://admin:strongpassword@postgres:5432/adminDB
+      - DUFS_URL=http://chat-dufs:5000
+    depends_on:
+      - postgres
+      - dufs
+    networks:
+      - chat-network
+    volumes:
+      - ./uploads:/tmp/uploads  # Temporary storage before DuFS upload
+
 networks:
   chat-network:
     driver: bridge
