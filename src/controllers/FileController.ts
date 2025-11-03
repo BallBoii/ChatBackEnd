@@ -12,29 +12,14 @@ export class FileController {
   // Upload file to DuFS and return temporary attachment data
   async uploadFile(req: MulterRequest, res: Response): Promise<void> {
     try {
-      console.log("Upload request received:", {
-        hasFile: !!req.file,
-        file: req.file
-          ? {
-              originalname: req.file.originalname,
-              mimetype: req.file.mimetype,
-              size: req.file.size,
-              filename: req.file.filename,
-              path: req.file.path,
-            }
-          : null,
-      });
-
       if (!req.file) {
         console.error("No file in request");
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
 
-      console.log("Uploading to DuFS...");
       // Upload to DuFS and get the URL
       const dufsUrl = await FileService.uploadFileToDuFS(req.file);
-      console.log("DuFS upload successful:", dufsUrl);
 
       // Create temporary attachment data (without messageId)
       const attachmentData: AttachmentData = {
@@ -48,8 +33,6 @@ export class FileController {
       const messageType: MessageType = FileService.getMessageTypeFromFile(
         req.file.mimetype
       );
-
-      console.log("Sending response:", { attachmentData, messageType });
 
       res.status(201).json({
         success: true,
