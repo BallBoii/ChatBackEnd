@@ -4,6 +4,7 @@ export interface ServerToClientEvents {
   room_joined: (data: { 
     roomToken: string; 
     participantCount: number;
+    participants: string[]; // Array of all nicknames in the room
     messages: any[]; // Message history when joining
   }) => void;
   room_left: (data: { nickname: string }) => void;
@@ -15,8 +16,8 @@ export interface ServerToClientEvents {
   message_deleted: (data: { messageId: string }) => void;
   
   // System events
-  user_joined: (data: { nickname: string; participantCount: number }) => void;
-  user_left: (data: { nickname: string; participantCount: number }) => void;
+  user_joined: (data: { nickname: string; participantCount: number; participants: string[] }) => void;
+  user_left: (data: { nickname: string; participantCount: number; participants: string[] }) => void;
   error: (data: { message: string; code?: string }) => void;
   
   // Session events

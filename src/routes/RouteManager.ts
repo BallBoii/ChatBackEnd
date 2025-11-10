@@ -1,7 +1,7 @@
 import { Router } from "express";
-import roomRouter from './roomRouter';
-import messageRouter from './messageRouter';
-import fileRouter from './fileRouter';
+import { RoomRouter } from './roomRouter';
+import { MessageRouter } from './messageRouter';
+import { FileRouter } from './fileRouter';
 import { errorHandler, notFoundHandler } from '@/middlewares/errorHandler';
 import { sanitizeInput } from '@/middlewares/sanitize';
 import express from 'express';
@@ -24,9 +24,9 @@ export class RouterManager {
         this.router.use(sanitizeInput);
         
         // API routes
-        this.router.use("/api/rooms", roomRouter);
-        this.router.use("/api/messages", messageRouter);
-        this.router.use("/api/files", fileRouter);
+        this.router.use("/api/rooms", new RoomRouter().getRouter());
+        this.router.use("/api/messages", new MessageRouter().getRouter());
+        this.router.use("/api/files", new FileRouter().getRouter());
 
         // Serve static files (for development/fallback)
         this.router.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
@@ -36,8 +36,8 @@ export class RouterManager {
             res.json({ 
                 status: 'ok', 
                 timestamp: new Date().toISOString(),
-                service: 'GhostRooms API',
-                endpoints: {
+                service: 'GhostRooms APIIII',
+                endpointssssssssssss: {
                     rooms: "/api/rooms",
                     messages: "/api/messages",
                     files: "/api/files",

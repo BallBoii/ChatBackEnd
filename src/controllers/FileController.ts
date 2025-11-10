@@ -18,8 +18,8 @@ export class FileController {
         return;
       }
 
-      // Upload to DuFS and get the URL
-      const dufsUrl = await FileService.uploadFileToDuFS(req.file);
+      // Upload to file server and get the public URL
+      const fileUrl = await FileService.uploadFileToDuFS(req.file);
 
       // Create temporary attachment data (without messageId)
       const attachmentData: AttachmentData = {
@@ -27,8 +27,9 @@ export class FileController {
         fileName: req.file.originalname,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
-        url: dufsUrl,
+        url: fileUrl, // This is the public URL (e.g., http://localhost:6969/filename)
       };
+      console.log("Uploaded file attachment data:", attachmentData);
 
       const messageType: MessageType = FileService.getMessageTypeFromFile(
         req.file.mimetype
@@ -38,6 +39,7 @@ export class FileController {
         success: true,
         attachment: attachmentData,
         messageType,
+        message: "File uploaded successfully. Use the URL to access the file.",
       });
     } catch (error) {
       console.error("Upload error details:", {
@@ -78,8 +80,11 @@ export class FileController {
   async serveFile(req: Request, res: Response): Promise<void> {
     try {
       const { fileName } = req.params;
-      const dufsUrl = `http://chat-dufs:5000/${fileName}`;
-      res.redirect(dufsUrl);
+      // Redirect to the public file server URL
+      const fileServerUrl = process.env.FILE_SERVER_URL || "http://localhost:6969";
+      const fileUrl = `${fileServerUrl}/${encodeURIComponent(fileName)}`;
+      
+      res.redirect(fileUrl);
     } catch (error) {
       res.status(500).json({ error: "File access failed" });
     }

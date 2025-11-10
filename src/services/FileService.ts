@@ -9,36 +9,44 @@ import {
 import fs from "fs";
 import path from "path";
 import axios from "axios";
+import { config } from "@/config/config";
 
 export class FileService {
-  private dufsUrl = process.env.DUFS_URL || "http://localhost:6969";
+  private fileServerUrl = config.FILE_SERVER_URL;
 
   async uploadFileToDuFS(file: Express.Multer.File): Promise<string> {
     try {
-      const safeFileName = file.filename.replace(/[^a-zA-Z0-9.-]/g, "_");
-      const fileBuffer = fs.readFileSync(file.path);
+      // Generate a unique filename to avoid collisions
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(2, 9);
+      const ext = path.extname(file.originalname);
+      const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-]/g, "_");
+      const uniqueFileName = `${timestamp}-${randomString}-${baseName}${ext}`;
 
+      const fileBuffer = fs.readFileSync(file.path);
+      console.log("Uploading file to file server:", this.fileServerUrl, uniqueFileName);
       const response = await axios.put(
-        `${this.dufsUrl}/${encodeURIComponent(safeFileName)}`,
+        `${this.fileServerUrl}/${encodeURIComponent(uniqueFileName)}`,
         fileBuffer,
         {
           headers: {
             "Content-Type": file.mimetype,
           },
-          timeout: 10000, // 10 seconds timeout
+          timeout: 30000, // 30 seconds timeout
         }
       );
 
       // Clean up temporary file
       fs.unlinkSync(file.path);
 
-      return `${this.dufsUrl}/${encodeURIComponent(safeFileName)}`;
+      // Return the public URL that frontend can access
+      return `${this.fileServerUrl}/${encodeURIComponent(uniqueFileName)}`;
     } catch (error) {
-      console.error("DuFS upload error:", error);
+      console.error("File server upload error:", error);
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
       }
-      throw new Error("Failed to upload to DuFS");
+      throw new Error("Failed to upload to file server");
     }
   }
 
@@ -65,9 +73,9 @@ export class FileService {
 
   async deleteFileFromDuFS(fileName: string): Promise<void> {
     try {
-      await axios.delete(`${this.dufsUrl}/${fileName}`);
+      await axios.delete(`${this.fileServerUrl}/${encodeURIComponent(fileName)}`);
     } catch (error) {
-      console.error("DuFS delete error:", error);
+      console.error("File server delete error:", error);
     }
   }
 

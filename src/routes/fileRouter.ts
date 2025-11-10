@@ -1,36 +1,50 @@
-import { Router } from "express";
+import { BaseRouter } from "./baseRouter";
 import { FileController } from "@/controllers/FileController";
 import { uploadMiddleware } from "@/middlewares/fileUpload";
 
-const fileRouter = Router();
-const fileController = new FileController();
+export class FileRouter extends BaseRouter {
+  private fileController: FileController;
 
-// Upload file to DuFS
-fileRouter.post(
-  "/upload",
-  uploadMiddleware.single("file"),
-  fileController.uploadFile.bind(fileController)
-);
+  constructor() {
+    super({
+      prefix: ""
+    });
+    this.fileController = new FileController();
+    this.setupRoutes();
+  }
 
-// Get files for a specific message
-fileRouter.get(
-  "/message/:messageId",
-  fileController.getMessageFiles.bind(fileController)
-);
+  private setupRoutes(): void {
+    // Upload file to file server (localhost:6969)
+    // Returns: { success, attachment: { url: "http://localhost:6969/filename", ... }, messageType }
+    // Frontend can directly access the file through the returned URL
+    this.router.post(
+      "/upload",
+      uploadMiddleware.single("file"),
+      this.fileController.uploadFile.bind(this.fileController)
+    );
 
-// Serve/proxy files through DuFS
-fileRouter.get("/:fileName", fileController.serveFile.bind(fileController));
+    // Get files for a specific message
+    // Returns all attachments associated with a message
+    this.router.get(
+      "/message/:messageId",
+      this.fileController.getMessageFiles.bind(this.fileController)
+    );
 
-// Delete file
-fileRouter.delete("/:fileId", fileController.deleteFile.bind(fileController));
+    // Serve/proxy files - redirects to file server
+    // Usage: /api/files/:fileName redirects to http://localhost:6969/:fileName
+    this.router.get("/:fileName", this.fileController.serveFile.bind(this.fileController));
 
-// Health check for file storage
-fileRouter.get("/health/storage", (req, res) => {
-  res.json({
-    status: "ok",
-    dufsUrl: process.env.DUFS_URL || "http://chat-dufs:5000",
-    timestamp: new Date().toISOString(),
-  });
-});
+    // Delete file
+    this.router.delete("/:fileId", this.fileController.deleteFile.bind(this.fileController));
 
-export default fileRouter;
+    // Health check for file storage
+    this.router.get("/health/storage", (req, res) => {
+      const fileServerUrl = process.env.FILE_SERVER_URL || "http://localhost:6969";
+      res.json({
+        status: "ok",
+        fileServerUrl: fileServerUrl,
+        timestamp: new Date().toISOString(),
+      });
+    });
+  }
+}
