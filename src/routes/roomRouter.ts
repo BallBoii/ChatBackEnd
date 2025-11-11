@@ -19,6 +19,9 @@ export class RoomRouter extends BaseRouter {
       roomController.createRoom.bind(roomController)
     );
 
+    // Get all public rooms
+    this.router.get('/public', roomController.getPublicRooms.bind(roomController));
+
     // Get room information
     this.router.get('/:token', roomController.getRoomInfo.bind(roomController));
 
