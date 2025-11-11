@@ -2,7 +2,6 @@ import { Server, Socket } from 'socket.io';
 import roomService from '@/services/RoomService';
 import sessionService from '@/services/SessionService';
 import messageService from '@/services/MessageService';
-import fileService from '@/services/FileService';
 import { 
   ServerToClientEvents, 
   ClientToServerEvents, 
@@ -99,7 +98,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
         // Validate session
         const session = await sessionService.validateSession(sessionToken);
 
-        // Send the message with nickname
+        // Send the message with nickname (attachments are already created in the database)
         const message = await messageService.sendMessage(
           session.sessionId,
           nickname,
@@ -108,23 +107,6 @@ export const setupSocketHandlers = (io: TypedServer) => {
           data.content || null,
           data.attachments
         );
-
-        // If there are attachments, create the attachment records in the database
-        let attachments = [];
-        if (data.attachments && data.attachments.length > 0) {
-          for (const attachmentData of data.attachments) {
-            try {
-              const dbAttachment = await fileService.createAttachmentFromData(
-                message.id,
-                attachmentData
-              );
-              attachments.push(dbAttachment);
-            } catch (error) {
-              console.error("Failed to create attachment record:", error);
-              // Continue with other attachments
-            }
-          }
-        }
 
         // Broadcast to all in the room (including sender)
         io.to(roomId).emit("new_message", {
