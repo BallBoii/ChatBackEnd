@@ -13,6 +13,7 @@ import { config } from "@/config/config";
 
 export class FileService {
   private fileServerUrl = config.FILE_SERVER_URL;
+  private publicFileUrl = config.CORS_ORIGIN;
 
   async uploadFileToDuFS(file: Express.Multer.File): Promise<string> {
     try {
