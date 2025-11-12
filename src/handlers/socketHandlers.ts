@@ -217,18 +217,18 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         // Only process if session data exists (not already cleaned by leave_room)
         if (sessionToken && roomId) {
-          // Get participant count and nicknames before removing
+          // Note: Socket is already removed from the room when disconnect fires
+          // So socketsInRoom already excludes the disconnected socket
           const socketsInRoom = await io.in(roomId).fetchSockets();
-          const participantCount = socketsInRoom.length - 1;
+          const participantCount = socketsInRoom.length; // Don't subtract 1, socket already removed
           const participants = socketsInRoom
-            .filter(s => s.id !== socket.id) // Exclude the disconnecting socket
             .map(s => s.data.nickname)
             .filter((n): n is string => !!n);
 
           // Notify others
           io.to(roomId).emit('user_left', { 
             nickname: nickname || 'Unknown', 
-            participantCount: Math.max(0, participantCount),
+            participantCount,
             participants
           });
 
