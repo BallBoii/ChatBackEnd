@@ -16,6 +16,8 @@ datasource db {
 model Room {
   id          String    @id @default(cuid())
   token       String    @unique // Token for joining the room
+  name        String?   // Optional custom room name
+  isPublic    Boolean   @default(false) // Public rooms are discoverable by all users
   createdAt   DateTime  @default(now())
   expiresAt   DateTime  // Room expiration time
   isActive    Boolean   @default(true)
@@ -25,6 +27,7 @@ model Room {
   
   @@index([token])
   @@index([expiresAt])
+  @@index([isPublic, isActive])
 }
 
 // Anonymous user sessions (no accounts)

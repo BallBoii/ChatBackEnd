@@ -9,13 +9,15 @@ export class RoomRepository {
   /**
    * Create a new room with a unique token
    */
-  async create(ttlHours: number): Promise<Room> {
+  async create(ttlHours: number, name?: string, isPublic: boolean = false): Promise<Room> {
     const token = this.generateRoomToken();
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
 
     return await prisma.room.create({
       data: {
         token,
+        name,
+        isPublic,
         expiresAt,
         isActive: true,
       },
@@ -119,6 +121,26 @@ export class RoomRepository {
           gt: now,
           lte: threshold,
         },
+      },
+    });
+  }
+
+  /**
+   * Find all active public rooms
+   */
+  async findPublicRooms(): Promise<Room[]> {
+    const now = new Date();
+    
+    return await prisma.room.findMany({
+      where: {
+        isPublic: true,
+        isActive: true,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
   }

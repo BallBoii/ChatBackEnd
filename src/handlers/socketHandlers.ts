@@ -23,7 +23,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
     socket.on('join_room', async ({ roomToken, sessionToken }) => {
       try {
 
-        if (socket.data.roomId && socket.data.roomToken == roomToken) {
+        if (socket.data.roomId && socket.data.roomToken === roomToken) {
           return; // Already in the room
         }
 
@@ -41,8 +41,14 @@ export const setupSocketHandlers = (io: TypedServer) => {
         // Join the room
         socket.join(roomId);
 
-        // Get participant count
-        const participantCount = (await io.in(roomId).fetchSockets()).length;
+        // Get all connected sockets in the room
+        const socketsInRoom = await io.in(roomId).fetchSockets();
+        const participantCount = socketsInRoom.length;
+        
+        // Get all nicknames of participants in the room
+        const participants = socketsInRoom
+          .map(s => s.data.nickname)
+          .filter((n): n is string => !!n);
 
         // Load and send message history to the joining user
         const messageHistory = await messageService.getRoomMessages(roomId);
@@ -51,11 +57,12 @@ export const setupSocketHandlers = (io: TypedServer) => {
         socket.emit('room_joined', { 
           roomToken, 
           participantCount,
+          participants, // Send list of all nicknames
           messages: messageHistory // Send message history
         });
 
         // Notify ONLY others in the room (not the joining user to avoid duplicate)
-        socket.to(roomId).emit('user_joined', { nickname, participantCount });
+        socket.to(roomId).emit('user_joined', { nickname, participantCount, participants });
 
         console.log(`[WebSocket] ${nickname} joined room ${roomToken} (loaded ${messageHistory.length} messages)`);
 
@@ -81,14 +88,17 @@ export const setupSocketHandlers = (io: TypedServer) => {
         const { sessionToken, roomId, nickname } = socket.data;
 
         if (!sessionToken || !roomId || !nickname) {
-          socket.emit('error', { message: 'Not connected to a room', code: 'NOT_IN_ROOM' });
+          socket.emit("error", {
+            message: "Not connected to a room",
+            code: "NOT_IN_ROOM",
+          });
           return;
         }
 
         // Validate session
         const session = await sessionService.validateSession(sessionToken);
 
-        // Send the message with nickname
+        // Send the message with nickname (attachments are already created in the database)
         const message = await messageService.sendMessage(
           session.sessionId,
           nickname,
@@ -99,7 +109,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
         );
 
         // Broadcast to all in the room (including sender)
-        io.to(roomId).emit('new_message', {
+        io.to(roomId).emit("new_message", {
           id: message.id,
           type: message.type,
           content: message.content,
@@ -160,11 +170,15 @@ export const setupSocketHandlers = (io: TypedServer) => {
         // Leave the socket room
         socket.leave(roomId);
 
-        // Get updated participant count
-        const participantCount = (await io.in(roomId).fetchSockets()).length;
+        // Get updated participant count and nicknames
+        const socketsInRoom = await io.in(roomId).fetchSockets();
+        const participantCount = socketsInRoom.length;
+        const participants = socketsInRoom
+          .map(s => s.data.nickname)
+          .filter((n): n is string => !!n);
 
         // Notify others
-        socket.to(roomId).emit('user_left', { nickname: nickname || 'Unknown', participantCount });
+        socket.to(roomId).emit('user_left', { nickname: nickname || 'Unknown', participantCount, participants });
 
         // Delete session
         await sessionService.removeSession(sessionToken);
@@ -202,13 +216,19 @@ export const setupSocketHandlers = (io: TypedServer) => {
         console.log(`[WebSocket] Client disconnected: ${socket.id}`);
 
         if (sessionToken && roomId) {
-          // Get participant count before removing
-          const participantCount = (await io.in(roomId).fetchSockets()).length - 1;
+          // Get participant count and nicknames before removing
+          const socketsInRoom = await io.in(roomId).fetchSockets();
+          const participantCount = socketsInRoom.length - 1;
+          const participants = socketsInRoom
+            .filter(s => s.id !== socket.id) // Exclude the disconnecting socket
+            .map(s => s.data.nickname)
+            .filter((n): n is string => !!n);
 
           // Notify others
           io.to(roomId).emit('user_left', { 
             nickname: nickname || 'Unknown', 
-            participantCount: Math.max(0, participantCount)
+            participantCount: Math.max(0, participantCount),
+            participants
           });
 
           // Delete session

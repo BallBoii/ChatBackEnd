@@ -1,9 +1,16 @@
-import { Router } from 'express';
+import { BaseRouter } from './baseRouter';
 import messageController from '@/controllers/MessageController';
 
-const router = Router();
+export class MessageRouter extends BaseRouter {
+  constructor() {
+    super({
+      prefix: ''
+    });
+    this.setupRoutes();
+  }
 
-// Get messages for a room (requires sessionToken in Authorization header)
-router.get('/:roomToken', messageController.getMessages.bind(messageController));
-
-export default router;
+  private setupRoutes(): void {
+    // Get messages for a room (requires sessionToken in Authorization header)
+    this.router.get('/:roomToken', messageController.getMessages.bind(messageController));
+  }
+}

@@ -2,6 +2,8 @@
 export interface RoomData {
   id: string;
   token: string;
+  name?: string;
+  isPublic: boolean;
   createdAt: Date;
   expiresAt: Date;
   isActive: boolean;
@@ -9,7 +11,9 @@ export interface RoomData {
 }
 
 export interface CreateRoomDTO {
+  name?: string;
   ttlHours?: number;
+  isPublic?: boolean;
 }
 
 export interface JoinRoomDTO {
@@ -19,7 +23,17 @@ export interface JoinRoomDTO {
 
 export interface RoomInfoDTO {
   token: string;
+  name?: string;
+  isPublic: boolean;
   expiresAt: Date;
   participantCount: number;
+  createdAt: Date;
+}
+
+export interface PublicRoomDTO {
+  token: string;
+  name?: string;
+  participantCount: number;
+  expiresAt: Date;
   createdAt: Date;
 }

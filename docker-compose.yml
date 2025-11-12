@@ -27,12 +27,32 @@ services:
     container_name: chat-dufs
     restart: always
     ports:
+      # Map container port 5000 to host port 6969
       - "127.0.0.1:6969:5000"
     volumes:
       - dufs_data:/data
     command: ["-A", "/data"]
     networks:
       - chat-network
+
+  # app:
+  #   build: .
+  #   container_name: chat-app
+  #   restart: always
+  #   ports:
+  #     - "127.0.0.1:8080:8080"
+  #   environment:
+  #     - DATABASE_URL=postgresql://admin:strongpassword@postgres:5432/adminDB
+  #     # Internal Docker network URL for backend to upload files
+  #     - FILE_SERVER_URL=http://chat-dufs:5000
+  #     # Note: Frontend uses http://localhost:6969 to access files directly
+  #   depends_on:
+  #     - postgres
+  #     - dufs
+  #   networks:
+  #     - chat-network
+  #   volumes:
+  #     - ./uploads:/tmp/uploads  # Temporary storage before file server upload
 
 networks:
   chat-network:

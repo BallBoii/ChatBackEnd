@@ -2,19 +2,22 @@ import roomRepository from '@/repository/RoomRepository';
 import sessionRepository from '@/repository/SessionRepository';
 import { AppError } from '@/types/error/AppError';
 import { config } from '@/config/config';
-import { RoomInfoDTO, CreateRoomDTO } from '@/types/room.types';
+import { RoomInfoDTO, CreateRoomDTO, PublicRoomDTO } from '@/types/room.types';
 
 export class RoomService {
   /**
    * Create a new room
    */
-  async createRoom(data?: CreateRoomDTO): Promise<{ token: string; expiresAt: Date }> {
+  async createRoom(data?: CreateRoomDTO): Promise<{ token: string; name?: string; expiresAt: Date }> {
     const ttlHours = data?.ttlHours || config.ROOM_TTL_HOURS;
+    const name = data?.name;
+    const isPublic = data?.isPublic || false;
 
-    const room = await roomRepository.create(ttlHours);
+    const room = await roomRepository.create(ttlHours, name, isPublic);
 
     return {
       token: room.token,
+      name: room.name || undefined,
       expiresAt: room.expiresAt,
     };
   }
@@ -37,6 +40,8 @@ export class RoomService {
 
     return {
       token: room.token,
+      name: room.name || undefined,
+      isPublic: room.isPublic,
       expiresAt: room.expiresAt,
       participantCount,
       createdAt: room.createdAt,
@@ -110,6 +115,29 @@ export class RoomService {
    */
   async getExpiringRooms(withinMinutes: number = 5) {
     return await roomRepository.findExpiringRooms(withinMinutes);
+  }
+
+  /**
+   * Get all public rooms
+   */
+  async getPublicRooms(): Promise<PublicRoomDTO[]> {
+    const rooms = await roomRepository.findPublicRooms();
+    
+    // Get participant count for each room
+    const roomsWithParticipants = await Promise.all(
+      rooms.map(async (room) => {
+        const participantCount = await roomRepository.countActiveSessions(room.id);
+        return {
+          token: room.token,
+          name: room.name || undefined,
+          participantCount,
+          expiresAt: room.expiresAt,
+          createdAt: room.createdAt,
+        };
+      })
+    );
+
+    return roomsWithParticipants;
   }
 }
 

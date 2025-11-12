@@ -43,3 +43,11 @@ export interface MessageResponseDTO {
   createdAt: Date;
   attachments?: AttachmentData[];
 }
+
+export interface CreateFileDto {
+  messageId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  url: string;
+}

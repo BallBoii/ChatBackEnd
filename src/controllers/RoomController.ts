@@ -10,9 +10,9 @@ export class RoomController {
    */
   async createRoom(req: Request, res: Response, next: NextFunction) {
     try {
-      const { ttlHours } = req.body;
+      const { ttlHours, name, isPublic } = req.body;
 
-      const room = await roomService.createRoom({ ttlHours });
+      const room = await roomService.createRoom({ ttlHours, name, isPublic });
 
       res.status(201).json({
         success: true,
@@ -83,6 +83,23 @@ export class RoomController {
       res.status(200).json({
         success: true,
         message: 'Room is valid',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get all public rooms
+   * GET /api/rooms/public
+   */
+  async getPublicRooms(req: Request, res: Response, next: NextFunction) {
+    try {
+      const rooms = await roomService.getPublicRooms();
+
+      res.status(200).json({
+        success: true,
+        data: rooms,
       });
     } catch (error) {
       next(error);
