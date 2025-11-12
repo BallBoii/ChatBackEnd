@@ -40,8 +40,8 @@ export class FileService {
       // Clean up temporary file
       fs.unlinkSync(file.path);
 
-      // Return the public URL that frontend can access
-      return `${this.fileServerUrl}/${encodeURIComponent(uniqueFileName)}`;
+      // Return the public URL through Nginx (users will access via /files/)
+      return `${this.publicFileUrl}/files/${encodeURIComponent(uniqueFileName)}`;
     } catch (error) {
       console.error("File server upload error:", error);
       if (fs.existsSync(file.path)) {
