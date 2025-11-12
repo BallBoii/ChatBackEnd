@@ -185,7 +185,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         console.log(`[WebSocket] ${nickname} left room ${roomToken}`);
 
-        // Clear socket data
+        // Clear socket data to prevent disconnect handler from processing
         socket.data = {};
       } catch (error: any) {
         console.error('[WebSocket] Leave room error:', error);
@@ -215,6 +215,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         console.log(`[WebSocket] Client disconnected: ${socket.id}`);
 
+        // Only process if session data exists (not already cleaned by leave_room)
         if (sessionToken && roomId) {
           // Get participant count and nicknames before removing
           const socketsInRoom = await io.in(roomId).fetchSockets();
