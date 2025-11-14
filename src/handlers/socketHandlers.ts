@@ -14,21 +14,141 @@ type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServe
 type TypedServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
 export const setupSocketHandlers = (io: TypedServer) => {
+  // Helper function to broadcast active users
+  const broadcastActiveUsers = async () => {
+    const allSockets = await io.fetchSockets();
+    const activeUsers = allSockets
+      .map((s) => s.data.nickname)
+      .filter((n): n is string => !!n);
+    
+    io.emit("active_users", { users: [...new Set(activeUsers)] }); // Remove duplicates
+  };
+
+  // Helper function to broadcast public rooms
+  const broadcastPublicRooms = async () => {
+    try {
+      const publicRooms = await roomService.getPublicRooms();
+      io.emit("public_rooms_update", { rooms: publicRooms });
+    } catch (error) {
+      console.error("[WebSocket] Failed to broadcast public rooms:", error);
+    }
+  };
+
+
   io.on('connection', (socket: TypedSocket) => {
     console.log(`[WebSocket] Client connected: ${socket.id}`);
 
     /**
+     * Set username (before joining a room)
+     */
+    socket.on("set_username", async ({ username }) => {
+      try {
+        if (!username || typeof username !== "string") {
+          socket.emit("error", {
+            message: "No Username provided",
+            code: "INVALID_USERNAME",
+          });
+          return;
+        }
+
+        const trimmedUsername = username.trim();
+
+        // Check length
+        if (trimmedUsername.length < 2) {
+          socket.emit("error", {
+            message: "Username must be at least 2 characters",
+            code: "USERNAME_TOO_SHORT",
+          });
+          return;
+        }
+
+        if (trimmedUsername.length > 20) {
+          socket.emit("error", {
+            message: "Username must be 20 characters or less",
+            code: "USERNAME_TOO_LONG",
+          });
+          return;
+        }
+
+        // Check if this shit existed
+        const allSockets = await io.fetchSockets();
+        const existingUsernames = allSockets
+          .map((s) => s.data.nickname)
+          .filter((n): n is string => !!n)
+          .map((n) => n.toLowerCase()); // Case-insensitive comparison
+
+        if (existingUsernames.includes(trimmedUsername.toLowerCase())) {
+          socket.emit("error", {
+            message: "Username is already taken",
+            code: "USERNAME_TAKEN",
+          });
+          return;
+        }
+        socket.data.nickname = username;
+
+        socket.emit("username_set", { username });
+        console.log(
+          `[WebSocket] Username set to ${username} for socket ${socket.id}`
+        );
+
+        await broadcastActiveUsers();
+      } catch (error: any) {
+        console.error("[WebSocket] Set username error:", error);
+        socket.emit("error", {
+          message: error.message || "Failed to set username",
+          code: error.code,
+        });
+      }
+    });
+
+    /**
+     * Get list of active users in the global server (not room-specific)
+     */
+    socket.on("get_active_users", async () => {
+      try {
+        const allSockets = await io.fetchSockets();
+        const activeUsers = allSockets
+          .map((s) => s.data.nickname)
+          .filter((n): n is string => !!n);
+
+        socket.emit("active_users", { users: [...new Set(activeUsers)] }); // Remove duplicates
+      } catch (error: any) {
+        console.error("[WebSocket] Get active users error:", error);
+        socket.emit("error", {
+          message: "Failed to get active users",
+          code: error.code,
+        });
+      }
+    });
+
+    /**
+     * Get public rooms list
+     */
+    socket.on("get_public_rooms", async () => {
+      try {
+        const publicRooms = await roomService.getPublicRooms();
+        socket.emit("public_rooms_update", { rooms: publicRooms });
+      } catch (error: any) {
+        console.error("[WebSocket] Get public rooms error:", error);
+        socket.emit("error", {
+          message: "Failed to get public rooms",
+          code: error.code || "GET_PUBLIC_ROOMS_ERROR",
+        });
+      }
+    });
+
+    /**
      * Join a room
      */
-    socket.on('join_room', async ({ roomToken, sessionToken }) => {
+    socket.on("join_room", async ({ roomToken, sessionToken }) => {
       try {
-
         if (socket.data.roomId && socket.data.roomToken === roomToken) {
           return; // Already in the room
         }
 
         // Validate session
-        const { sessionId, roomId, nickname } = await sessionService.validateSession(sessionToken);
+        const { sessionId, roomId, nickname } =
+          await sessionService.validateSession(sessionToken);
 
         // Store session data in socket
         socket.data.sessionToken = sessionToken;
@@ -44,38 +164,45 @@ export const setupSocketHandlers = (io: TypedServer) => {
         // Get all connected sockets in the room
         const socketsInRoom = await io.in(roomId).fetchSockets();
         const participantCount = socketsInRoom.length;
-        
+
         // Get all nicknames of participants in the room
         const participants = socketsInRoom
-          .map(s => s.data.nickname)
+          .map((s) => s.data.nickname)
           .filter((n): n is string => !!n);
 
         // Load and send message history to the joining user
         const messageHistory = await messageService.getRoomMessages(roomId);
-        
+
         // Notify the user with room info and message history
-        socket.emit('room_joined', { 
-          roomToken, 
+        socket.emit("room_joined", {
+          roomToken,
           participantCount,
           participants, // Send list of all nicknames
-          messages: messageHistory // Send message history
+          messages: messageHistory, // Send message history
         });
 
         // Notify ONLY others in the room (not the joining user to avoid duplicate)
-        socket.to(roomId).emit('user_joined', { nickname, participantCount, participants });
+        socket
+          .to(roomId)
+          .emit("user_joined", { nickname, participantCount, participants });
 
-        console.log(`[WebSocket] ${nickname} joined room ${roomToken} (loaded ${messageHistory.length} messages)`);
+        console.log(
+          `[WebSocket] ${nickname} joined room ${roomToken} (loaded ${messageHistory.length} messages)`
+        );
+
+        // After successful join, broadcast active users and public rooms
+        await broadcastPublicRooms(); // Didn't check the public flag (I'm lazy)
 
         // Check room TTL and send warning if needed
         const ttlInfo = await roomService.checkRoomTTL(roomId);
         if (ttlInfo.shouldWarn) {
-          socket.emit('room_ttl_warning', { expiresIn: ttlInfo.expiresIn });
+          socket.emit("room_ttl_warning", { expiresIn: ttlInfo.expiresIn });
         }
       } catch (error: any) {
-        console.error('[WebSocket] Join room error:', error);
-        socket.emit('error', { 
-          message: error.message || 'Failed to join room',
-          code: error.code 
+        console.error("[WebSocket] Join room error:", error);
+        socket.emit("error", {
+          message: error.message || "Failed to join room",
+          code: error.code,
         });
       }
     });
@@ -83,7 +210,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
     /**
      * Send a message
      */
-    socket.on('send_message', async (data) => {
+    socket.on("send_message", async (data) => {
       try {
         const { sessionToken, roomId, nickname } = socket.data;
 
@@ -120,10 +247,10 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         console.log(`[WebSocket] Message sent in room by ${nickname}`);
       } catch (error: any) {
-        console.error('[WebSocket] Send message error:', error);
-        socket.emit('error', { 
-          message: error.message || 'Failed to send message',
-          code: error.code 
+        console.error("[WebSocket] Send message error:", error);
+        socket.emit("error", {
+          message: error.message || "Failed to send message",
+          code: error.code,
         });
       }
     });
@@ -131,12 +258,15 @@ export const setupSocketHandlers = (io: TypedServer) => {
     /**
      * Delete a message
      */
-    socket.on('delete_message', async ({ messageId }) => {
+    socket.on("delete_message", async ({ messageId }) => {
       try {
         const { sessionToken, roomId } = socket.data;
 
         if (!sessionToken || !roomId) {
-          socket.emit('error', { message: 'Not connected to a room', code: 'NOT_IN_ROOM' });
+          socket.emit("error", {
+            message: "Not connected to a room",
+            code: "NOT_IN_ROOM",
+          });
           return;
         }
 
@@ -144,14 +274,14 @@ export const setupSocketHandlers = (io: TypedServer) => {
         await messageService.deleteMessage(messageId, session.sessionId);
 
         // Notify all in the room
-        io.to(roomId).emit('message_deleted', { messageId });
+        io.to(roomId).emit("message_deleted", { messageId });
 
         console.log(`[WebSocket] Message ${messageId} deleted`);
       } catch (error: any) {
-        console.error('[WebSocket] Delete message error:', error);
-        socket.emit('error', { 
-          message: error.message || 'Failed to delete message',
-          code: error.code 
+        console.error("[WebSocket] Delete message error:", error);
+        socket.emit("error", {
+          message: error.message || "Failed to delete message",
+          code: error.code,
         });
       }
     });
@@ -159,7 +289,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
     /**
      * Leave a room
      */
-    socket.on('leave_room', async () => {
+    socket.on("leave_room", async () => {
       try {
         const { sessionToken, roomId, nickname, roomToken } = socket.data;
 
@@ -174,46 +304,62 @@ export const setupSocketHandlers = (io: TypedServer) => {
         const socketsInRoom = await io.in(roomId).fetchSockets();
         const participantCount = socketsInRoom.length;
         const participants = socketsInRoom
-          .map(s => s.data.nickname)
+          .map((s) => s.data.nickname)
           .filter((n): n is string => !!n);
 
         // Notify others
-        socket.to(roomId).emit('user_left', { nickname: nickname || 'Unknown', participantCount, participants });
+        socket
+          .to(roomId)
+          .emit("user_left", {
+            nickname: nickname || "Unknown",
+            participantCount,
+            participants,
+          });
 
         // Delete session
         await sessionService.removeSession(sessionToken);
+        await broadcastActiveUsers();
+        await broadcastPublicRooms();
 
         console.log(`[WebSocket] ${nickname} left room ${roomToken}`);
 
-        // Clear socket data to prevent disconnect handler from processing
-        socket.data = {};
+        // Clear room data only (If user leave the room it should naviagate back to room selection instead)
+        socket.data.sessionToken = undefined;
+        socket.data.roomId = undefined;
+        socket.data.roomToken = undefined;
+        socket.data.messageCount = 0;
+        socket.data.lastMessageTime = 0;
       } catch (error: any) {
-        console.error('[WebSocket] Leave room error:', error);
+        console.error("[WebSocket] Leave room error:", error);
       }
     });
 
     /**
      * Heartbeat to keep session alive
      */
-    socket.on('heartbeat', async () => {
+    socket.on("heartbeat", async () => {
       try {
         const { sessionToken } = socket.data;
         if (sessionToken) {
           await sessionService.validateSession(sessionToken);
         }
       } catch (error) {
-        socket.emit('error', { message: 'Session expired', code: 'SESSION_EXPIRED' });
+        socket.emit("error", {
+          message: "Session expired",
+          code: "SESSION_EXPIRED",
+        });
       }
     });
 
     /**
      * Handle disconnection
      */
-    socket.on('disconnect', async () => {
+    socket.on("disconnect", async () => {
       try {
         const { sessionToken, roomId, nickname, roomToken } = socket.data;
 
         console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+        await broadcastActiveUsers();
 
         // Only process if session data exists (not already cleaned by leave_room)
         if (sessionToken && roomId) {
@@ -222,23 +368,26 @@ export const setupSocketHandlers = (io: TypedServer) => {
           const socketsInRoom = await io.in(roomId).fetchSockets();
           const participantCount = socketsInRoom.length; // Don't subtract 1, socket already removed
           const participants = socketsInRoom
-            .map(s => s.data.nickname)
+            .map((s) => s.data.nickname)
             .filter((n): n is string => !!n);
 
           // Notify others
-          io.to(roomId).emit('user_left', { 
-            nickname: nickname || 'Unknown', 
+          io.to(roomId).emit("user_left", {
+            nickname: nickname || "Unknown",
             participantCount,
-            participants
+            participants,
           });
 
           // Delete session
           await sessionService.removeSession(sessionToken);
+          await broadcastPublicRooms(); // Update public rooms on disconnect
 
-          console.log(`[WebSocket] ${nickname} disconnected from room ${roomToken}`);
+          console.log(
+            `[WebSocket] ${nickname} disconnected from room ${roomToken}`
+          );
         }
       } catch (error) {
-        console.error('[WebSocket] Disconnect cleanup error:', error);
+        console.error("[WebSocket] Disconnect cleanup error:", error);
       }
     });
   });
@@ -256,6 +405,8 @@ export const setupSocketHandlers = (io: TypedServer) => {
           io.to(room.id).emit('room_ttl_warning', { expiresIn });
         }
       }
+
+      await broadcastPublicRooms();
     } catch (error) {
       console.error('[WebSocket] TTL warning error:', error);
     }

@@ -14,6 +14,7 @@ export interface CreateRoomDTO {
   name?: string;
   ttlHours?: number;
   isPublic?: boolean;
+  isDM?: boolean;
 }
 
 export interface JoinRoomDTO {

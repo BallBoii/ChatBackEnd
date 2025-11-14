@@ -25,7 +25,7 @@ export class FileService {
       const uniqueFileName = `${timestamp}-${randomString}-${baseName}${ext}`;
 
       const fileBuffer = fs.readFileSync(file.path);
-      console.log("Uploading file to file server:", this.fileServerUrl, uniqueFileName);
+      console.log("[FileService] Uploading file to file server:", this.fileServerUrl, uniqueFileName);
       const response = await axios.put(
         `${this.fileServerUrl}/${encodeURIComponent(uniqueFileName)}`,
         fileBuffer,
@@ -43,7 +43,7 @@ export class FileService {
       // Return the public URL through Nginx (users will access via /files/)
       return `${this.publicFileUrl}/files/${encodeURIComponent(uniqueFileName)}`;
     } catch (error) {
-      console.error("File server upload error:", error);
+      console.error("[FileService] File server upload error:", error);
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
       }

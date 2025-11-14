@@ -10,9 +10,9 @@ export class RoomController {
    */
   async createRoom(req: Request, res: Response, next: NextFunction) {
     try {
-      const { ttlHours, name, isPublic } = req.body;
+      const { ttlHours, name, isPublic, isDM } = req.body;
 
-      const room = await roomService.createRoom({ ttlHours, name, isPublic });
+      const room = await roomService.createRoom({ ttlHours, name, isPublic, isDM });
 
       res.status(201).json({
         success: true,

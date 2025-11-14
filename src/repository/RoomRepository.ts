@@ -9,8 +9,8 @@ export class RoomRepository {
   /**
    * Create a new room with a unique token
    */
-  async create(ttlHours: number, name?: string, isPublic: boolean = false): Promise<Room> {
-    const token = this.generateRoomToken();
+  async create(ttlHours: number, name?: string, isPublic: boolean = false, isDM: boolean = false): Promise<Room> {
+    const token = this.generateRoomToken(name, isDM);
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
 
     return await prisma.room.create({
@@ -103,7 +103,14 @@ export class RoomRepository {
   /**
    * Generate a unique room token
    */
-  private generateRoomToken(): string {
+  private generateRoomToken(name?: string, isDM: boolean = false): string {
+    if(isDM){
+      name = name || "kuyrai";
+      if(name.length > 6)
+        name = name.substring(0,6);
+      return `ghost-dm-${name}`;
+    }
+    
     return `ghost-${nanoid()}`;
   }
 
