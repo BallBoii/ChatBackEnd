@@ -13,7 +13,7 @@ import { config } from "@/config/config";
 
 export class FileService {
   private fileServerUrl = config.FILE_SERVER_URL;
-  private publicFileUrl = config.CORS_ORIGIN;
+  private publicFileUrl = config.PUBLIC_URL;
 
   async uploadFileToDuFS(file: Express.Multer.File): Promise<string> {
     try {
@@ -40,8 +40,14 @@ export class FileService {
       // Clean up temporary file
       fs.unlinkSync(file.path);
 
-      // Return the public URL through Nginx (users will access via /files/)
-      return `${this.publicFileUrl}/files/${encodeURIComponent(uniqueFileName)}`;
+      // Return the public URL
+      // In production: nginx proxies /files/ to DuFS
+      // In development: direct access to DuFS server
+      const fileUrl = this.publicFileUrl.includes('localhost:6969') 
+        ? `${this.publicFileUrl}/${encodeURIComponent(uniqueFileName)}`
+        : `${this.publicFileUrl}/files/${encodeURIComponent(uniqueFileName)}`;
+      
+      return fileUrl;
     } catch (error) {
       console.error("[FileService] File server upload error:", error);
       if (fs.existsSync(file.path)) {

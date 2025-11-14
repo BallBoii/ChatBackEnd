@@ -7,6 +7,7 @@ interface EnvConfig {
   DB_URL: string;
   NODE_ENV: string;
   FILE_SERVER_URL: string;
+  PUBLIC_URL: string;
   CORS_ORIGIN: string;
   
   // Room config
@@ -27,6 +28,7 @@ export const config: EnvConfig = {
   DB_URL: process.env.DATABASE_URL as string,
   NODE_ENV: process.env.NODE_ENV || 'development',
   FILE_SERVER_URL: process.env.FILE_SERVER_URL || 'http://localhost:6969',
+  PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6969',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
   
   ROOM_TTL_HOURS: Number(process.env.ROOM_TTL_HOURS) || 24,

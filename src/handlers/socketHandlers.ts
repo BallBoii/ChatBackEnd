@@ -323,10 +323,11 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         console.log(`[WebSocket] ${nickname} left room ${roomToken}`);
 
-        // Clear room data only (If user leave the room it should naviagate back to room selection instead)
+        // Clear room data - this prevents disconnect from emitting user_left again
         socket.data.sessionToken = undefined;
         socket.data.roomId = undefined;
         socket.data.roomToken = undefined;
+        socket.data.nickname = socket.data.nickname; // Keep nickname for potential reconnection
         socket.data.messageCount = 0;
         socket.data.lastMessageTime = 0;
       } catch (error: any) {
@@ -361,12 +362,13 @@ export const setupSocketHandlers = (io: TypedServer) => {
         console.log(`[WebSocket] Client disconnected: ${socket.id}`);
         await broadcastActiveUsers();
 
-        // Only process if session data exists (not already cleaned by leave_room)
-        if (sessionToken && roomId) {
+        // Only process if session data exists AND socket is still in the room
+        // (leave_room already handled notification if user explicitly left)
+        if (sessionToken && roomId && socket.rooms.has(roomId)) {
           // Note: Socket is already removed from the room when disconnect fires
           // So socketsInRoom already excludes the disconnected socket
           const socketsInRoom = await io.in(roomId).fetchSockets();
-          const participantCount = socketsInRoom.length; // Don't subtract 1, socket already removed
+          const participantCount = socketsInRoom.length;
           const participants = socketsInRoom
             .map((s) => s.data.nickname)
             .filter((n): n is string => !!n);
@@ -380,7 +382,7 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
           // Delete session
           await sessionService.removeSession(sessionToken);
-          await broadcastPublicRooms(); // Update public rooms on disconnect
+          await broadcastPublicRooms();
 
           console.log(
             `[WebSocket] ${nickname} disconnected from room ${roomToken}`
