@@ -12,8 +12,9 @@ export class RoomService {
     const ttlHours = data?.ttlHours || config.ROOM_TTL_HOURS;
     const name = data?.name;
     const isPublic = data?.isPublic || false;
+    const isDM = data?.isDM || false;
 
-    const room = await roomRepository.create(ttlHours, name, isPublic);
+    const room = await roomRepository.create(ttlHours, name, isPublic, isDM);
 
     return {
       token: room.token,
