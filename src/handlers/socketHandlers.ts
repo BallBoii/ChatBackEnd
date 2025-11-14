@@ -323,8 +323,12 @@ export const setupSocketHandlers = (io: TypedServer) => {
 
         console.log(`[WebSocket] ${nickname} left room ${roomToken}`);
 
-        // Clear socket data to prevent disconnect handler from processing
-        socket.data = {};
+        // Clear room data only (If user leave the room it should naviagate back to room selection instead)
+        socket.data.sessionToken = undefined;
+        socket.data.roomId = undefined;
+        socket.data.roomToken = undefined;
+        socket.data.messageCount = 0;
+        socket.data.lastMessageTime = 0;
       } catch (error: any) {
         console.error("[WebSocket] Leave room error:", error);
       }
